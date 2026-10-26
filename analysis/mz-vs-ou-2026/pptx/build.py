@@ -195,71 +195,110 @@ def pct_of(r, unit):
 
 OBJ = [('gross', 'Гросс'), ('kv', 'Карты выщелачивания Гросс'), ('tab', 'Таборный'), ('tokko', 'Токко')]
 
-# 1. Сводка за 9 месяцев
-for unit in ('t', 'm3'):
-    rs = {k: add(*[obj_month(k, m) for m in MONTHS]) for k, _ in OBJ}
-    tot = add(rs['gross'], rs['tab'], rs['tokko'])
-    rows = [(nm, rs[k]) for k, nm in OBJ] + [('Всего', tot, True, 'ТРИ КАРЬЕРА')]
-    ul = 'тыс. т' if unit == 't' else 'тыс. м³'
-    cm = ('Итог за 9 месяцев по трём карьерам в допуске. Вне допуска только карты выщелачивания Гросс по тоннам: '
-          'учёт выше замера на %s%%. «Всего» — Гросс + Таборный + Токко, без КВ. ' % num(pct_of(rs['kv'], 't'))) + \
-         ('Помесячно разброс заметно больше — см. следующие слайды. ' + (NOTE_T if unit == 't' else ''))
-    new_slide('Сходимость оперативного учёта и маркзамера · итог %s · %s' % (PER, ul), 'Карьер', unit, rows, cm)
+# ---------- сетка «месяцы × объекты» ----------
+def matrix_slide(title, first_col, cols, data, comment):
+    """cols: [(заголовок, подзаголовок)], data: [(метка, [r…], итог?)]; r = (зт, ут, зм, ум); всё в м³."""
+    sl = prs.slides.add_slide(tpl.slide_layout)
+    for el in proto:
+        sl.shapes._spTree.append(copy.deepcopy(el))
+    sh = {s.name: s for s in sl.shapes}
+    set_run_text(sh['TextBox 913'], title)
+    set_run_text(sh['TextBox 921'], first_col)
+    for nm in ('TextBox 922', 'TextBox 923', 'TextBox 924', 'TextBox 925', 'TextBox 926', 'TextBox 927', 'TextBox 928'):
+        sh[nm]._element.getparent().remove(sh[nm]._element)
+    x0 = 2.05 * IN
+    cw = (LEFT + WIDTH - 0.08 * IN - x0) / len(cols)
+    hy = 1.17 * IN
+    for j, (h1, h2) in enumerate(cols):
+        text(sl, x0 + j * cw, hy, cw, 0.17 * IN, h1, 9.5, '1F2933', True)
+        text(sl, x0 + j * cw, hy + 0.17 * IN, cw, 0.13 * IN, h2, 7.5, '6B7785')
+    top = 1.55 * IN
+    n = len(data)
+    pitch = (BOTTOM + 0.25 * IN - top) / n
+    h = pitch * 0.88
+    for i, (label, rs, total) in enumerate(data):
+        y = top + i * pitch
+        box(sl, LEFT, y, WIDTH, h, MSO_SHAPE.ROUNDED_RECTANGLE,
+            fill='F4F5F6' if total else 'FFFFFF', line='DDE1E4', adj=0.12)
+        text(sl, CX['name'][0], y, 1.25 * IN, h, label, 10.5, bold=True, align=PP_ALIGN.LEFT)
+        for j, r in enumerate(rs):
+            cx = x0 + j * cw
+            if r is None:
+                text(sl, cx, y, cw, h, '—', 10, '9AA5AD')
+                continue
+            z, u = r[2], r[3]
+            d = u - z; pc = d / z * 100
+            st = status(pc); _, pf, pt, _ = COL[st]
+            pw, ph = 0.78 * IN, h * 0.74
+            pill = box(sl, cx + 0.06 * IN, y + (h - ph) / 2, pw, ph, MSO_SHAPE.ROUNDED_RECTANGLE, fill=pf, adj=0.25)
+            text(sl, 0, 0, 0, 0, ('+' if pc > 0 else '−' if pc < 0 else '') + f'{abs(pc):.1f}'.replace('.', ',') + '%',
+                 11.5, pt, True, shape=pill)
+            tx = cx + 0.06 * IN + pw + 0.07 * IN
+            tw = cw - (tx - cx) - 0.02 * IN
+            text(sl, tx, y + h * 0.08, tw, h * 0.46, 'Δ ' + num(d, True), 9.5, '1F2933', total, PP_ALIGN.LEFT)
+            text(sl, tx, y + h * 0.52, tw, h * 0.42, num(z) + ' → ' + num(u), 7.5, '6B7785', False, PP_ALIGN.LEFT)
+    cy = top + n * pitch + 0.05 * IN
+    cb = box(sl, LEFT, cy, 9198864, min(6.62 * IN - cy, 1161288), MSO_SHAPE.ROUNDED_RECTANGLE, fill='FFFFFF', line='DDE1E4', adj=0.08)
+    tf = cb.text_frame; tf.word_wrap = True; tf.vertical_anchor = MSO_ANCHOR.TOP
+    tf.margin_left = tf.margin_right = Emu(118872); tf.margin_top = Emu(54864)
+    p = tf.paragraphs[0]; p.alignment = PP_ALIGN.LEFT
+    for t, b, c in (('Комментарии: ', True, '6B7785'), (comment, False, '404040')):
+        rr = p.add_run(); rr.text = t
+        rr.font.size = Pt(9); rr.font.bold = b; rr.font.name = 'Arial'; rr.font.color.rgb = rgb(c)
+    return sl
 
-# 2. По месторождениям, по месяцам
-COMM = {
- 'gross': None,
- 'kv': 'Помесячное расхождение до ±60%%: ОУ и маркзамер по укладке относят объёмы к разным месяцам (январь в ОУ — 0,9 млн т против 2,3 млн т по замеру). Объём замера — сумма замеренных панелей. ',
- 'tab': 'Таборный с Врезанным. Вне допуска январь и март (сдвиг объёмов между месяцами), с апреля — в допуске. ',
- 'tokko': 'Замер — маркшейдерская справка Токко (горная масса в целике). Вне допуска 4–5 месяцев: февраль–март замер выше учёта, июнь–июль ниже. ',
-}
-for k, nm in OBJ:
-    for unit in ('t', 'm3'):
-        rows = [(MN[m - 1], obj_month(k, m)) for m in MONTHS]
-        rows.append(('Итого 9 мес.', add(*[r[1] for r in rows]), True))
-        ul = 'тыс. т' if unit == 't' else 'тыс. м³'
-        extra = NOTE_T if (unit == 't' and k in ('gross', 'tab')) else ''
-        if k == 'kv' and unit == 't':
-            extra = 'Плотность в ОУ 1,66 т/м³ против 1,51 т/м³ по замеру: в м³ итог в допуске, в тоннах — нет.'
-        cm = COMM[k]
-        if cm is None:
-            ps = [pct_of(r[1], unit) for r in rows[:-1]]
-            cm = ('В допуске %d месяцев из 9; наибольшее отклонение — %s (%s%%). Учёт выше замера в %d месяцах из 9 — ОУ систематически завышает выемку. '
-                  % (sum(abs(x) <= TOL for x in ps), MN[max(range(9), key=lambda i: abs(ps[i]))].lower(),
-                     num(max(ps, key=abs), True), sum(x > 0 for x in ps)))
-        new_slide('%s · сходимость ОУ и маркзамера по месяцам · %s' % (nm, ul), 'Месяц', unit, rows, cm + extra)
+def pct3(r): return (r[3] - r[2]) / r[2] * 100
 
-# 3. По стадиям
-for unit in ('t', 'm3'):
-    rows = []
-    for m in (7, 8):
-        sts = ['ST3', 'ST4', 'ST5', 'ST6']
-        rs = [stage_gross(m, s) for s in sts]
-        rows += [('%s · %s' % (MN[m - 1], s), r) for s, r in zip(sts, rs)]
-        rows.append(('%s · итого' % MN[m - 1], add(*rs), True))
-    ul = 'тыс. т' if unit == 't' else 'тыс. м³'
-    new_slide('Гросс · сходимость по стадиям · июль–август 2026 · %s' % ul, 'Месяц · стадия', unit, rows,
-              'Разбивка замера по стадиям есть только в справках за июль и август (в сентябрьском файле лист стадий — копия августа). '
-              'Тонны по стадиям — объём замера × плотность ОУ стадии. Июль ST3 и август ST5: учёт выше замера на 9–22%.')
-for unit in ('t', 'm3'):
-    rows = []
-    for m in (7, 8):
-        sts = [('WST4', 'W4'), ('EST3', 'E3'), ('EST4', 'E4'), ('VREZ', 'Врезанный')]
-        rs = [stage_tab(m, s) for s, _ in sts]
-        rows += [('%s · %s' % (MN[m - 1], lb), r) for (_, lb), r in zip(sts, rs)]
-        rows.append(('%s · итого' % MN[m - 1], add(*rs), True))
-    ul = 'тыс. т' if unit == 't' else 'тыс. м³'
-    new_slide('Таборный · сходимость по стадиям · июль–август 2026 · %s' % ul, 'Месяц · стадия', unit, rows,
-              'Стадии W4, E3, E4 по замеру — только июль и август. Врезанный: замер выше учёта на 9–12%, E3 — учёт выше замера на 8–15%. '
-              'Тонны W4/E3/E4 и июль Врезанного — объём замера × плотность ОУ.')
-for s in (1, 2, 3):
-    for unit in ('t', 'm3'):
-        rows = [(MN[m - 1], obj_month('tk%d' % s, m)) for m in MONTHS]
-        rows.append(('Итого 9 мес.', add(*[r[1] for r in rows]), True))
-        ul = 'тыс. т' if unit == 't' else 'тыс. м³'
-        new_slide('Токко · стадия %d · сходимость ОУ и маркзамера по месяцам · %s' % (s, ul), 'Месяц', unit, rows,
-                  'Замер — маркшейдерская справка Токко по стадии %d; учёт — место погрузки ST-%d. '
-                  'По стадиям отклонения больше, чем по карьеру в целом: часть объёма отнесена в ОУ к другой стадии.' % (s, s))
+# 1. Общий слайд: горная масса, тыс. м³, по месяцам
+OBJ = [('gross', 'Гросс'), ('kv', 'КВ Гросс'), ('tab', 'Таборный'), ('tokko', 'Токко')]
+data = []
+for m in MONTHS:
+    rs = [obj_month(k, m) for k, _ in OBJ]
+    data.append((MN[m - 1], rs + [add(rs[0], rs[2], rs[3])], False))
+tot = [add(*[d[1][j] for d in data]) for j in range(5)]
+data.append(('Итого 9 мес.', tot, True))
+cnt = lambda j: sum(abs(pct3(d[1][j])) <= TOL for d in data[:-1])
+matrix_slide('Сходимость оперативного учёта и маркзамера · горная масса, тыс. м³ · январь–сентябрь 2026', 'Месяц',
+    [('Гросс', 'Δ %  ·  Δ  ·  замер → учёт'), ('КВ Гросс', 'укладка на карты'), ('Таборный', 'с Врезанным'),
+     ('Токко', 'горная масса в целике'), ('Всего', 'три карьера, без КВ')], data,
+    'Δ = учёт − замер, %% от замера; допуск ±5%%. За 9 месяцев все объекты в допуске: Гросс %s%%, КВ %s%%, Таборный %s%%, Токко %s%%, '
+    'всего %s%%. Помесячно в допуске: Гросс %d из 9, Таборный %d, Токко %d, КВ — %d: укладку ОУ и замер относят к разным месяцам '
+    '(январь в ОУ 578 тыс. м³ против 1 565 по замеру). По трём карьерам вне допуска январь (+7,5%%) и март (−6,1%%): объёмы сдвигаются между месяцами.'
+    % tuple([num(pct3(tot[j]), True) for j in range(5)] + [cnt(0), cnt(2), cnt(3), cnt(1)]))
+
+# 2–3. Стадии Гросс и Таборный, июль–август (формат образца, тыс. м³)
+rows = []
+for m in (7, 8):
+    sts = ['ST3', 'ST4', 'ST5', 'ST6']
+    rs = [stage_gross(m, s) for s in sts]
+    rows += [('%s · %s' % (MN[m - 1], s), r) for s, r in zip(sts, rs)]
+    rows.append(('%s · итого' % MN[m - 1], add(*rs), True))
+new_slide('Гросс · сходимость по стадиям · июль–август 2026 · тыс. м³', 'Месяц · стадия', 'm3', rows,
+          'Разбивка замера по стадиям есть только в справках за июль и август (в сентябрьском файле лист стадий — копия августа). '
+          'Вне допуска: июль ST3 (учёт выше замера на 8,9%) и август ST5 (+21,8%); по итогу месяца — в допуске. '
+          'Похоже, часть объёма в ОУ отнесена к соседней стадии (август: ST4 −3,7%, ST5 +21,8%).')
+rows = []
+for m in (7, 8):
+    sts = [('WST4', 'W4'), ('EST3', 'E3'), ('EST4', 'E4'), ('VREZ', 'Врезанный')]
+    rs = [stage_tab(m, s) for s, _ in sts]
+    rows += [('%s · %s' % (MN[m - 1], lb), r) for (_, lb), r in zip(sts, rs)]
+    rows.append(('%s · итого' % MN[m - 1], add(*rs), True))
+new_slide('Таборный · сходимость по стадиям · июль–август 2026 · тыс. м³', 'Месяц · стадия', 'm3', rows,
+          'Стадии W4, E3, E4 по замеру есть только за июль и август. Врезанный: замер выше учёта на 9–12% — ОУ занижает выемку; '
+          'E3: учёт выше замера на 8–15%. Итог по карьеру в допуске за счёт взаимной компенсации стадий.')
+
+# 4. Токко по стадиям: месяцы × стадии
+data = []
+for m in MONTHS:
+    rs = [obj_month('tk%d' % s, m) for s in (1, 2, 3)]
+    data.append((MN[m - 1], rs + [add(*rs)], False))
+tot = [add(*[d[1][j] for d in data]) for j in range(4)]
+data.append(('Итого 9 мес.', tot, True))
+matrix_slide('Токко · сходимость ОУ и маркзамера по стадиям · тыс. м³ · январь–сентябрь 2026', 'Месяц',
+    [('Стадия 1', 'Δ %  ·  Δ  ·  замер → учёт'), ('Стадия 2', 'ST-2'), ('Стадия 3', 'ST-3'), ('Карьер', 'стадии 1–3')], data,
+    'Замер — маркшейдерская справка Токко по стадиям; учёт — места погрузки ST-1…ST-3. По стадиям отклонения больше, чем по карьеру: '
+    'в феврале стадия 2 −32%%, стадия 3 +32%% — объём отнесён в ОУ к другой стадии. В июне–августе стадия 3 завышена в ОУ '
+    '(+13…19%%); за 9 месяцев: стадия 1 %s%%, стадия 2 %s%%, стадия 3 %s%%.' % tuple(num(pct3(tot[j]), True) for j in range(3)))
 
 # удаляем исходный слайд-образец
 sldIdLst = prs.slides._sldIdLst
