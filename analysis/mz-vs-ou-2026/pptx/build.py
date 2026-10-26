@@ -206,7 +206,7 @@ def matrix_slide(title, first_col, cols, data, comment):
     set_run_text(sh['TextBox 921'], first_col)
     for nm in ('TextBox 922', 'TextBox 923', 'TextBox 924', 'TextBox 925', 'TextBox 926', 'TextBox 927', 'TextBox 928'):
         sh[nm]._element.getparent().remove(sh[nm]._element)
-    x0 = 2.05 * IN
+    x0 = 1.8 * IN
     cw = (LEFT + WIDTH - 0.08 * IN - x0) / len(cols)
     hy = 1.17 * IN
     for j, (h1, h2) in enumerate(cols):
@@ -214,7 +214,7 @@ def matrix_slide(title, first_col, cols, data, comment):
         text(sl, x0 + j * cw, hy + 0.17 * IN, cw, 0.13 * IN, h2, 7.5, '6B7785')
     top = 1.55 * IN
     n = len(data)
-    pitch = (BOTTOM + 0.25 * IN - top) / n
+    pitch = min(0.6 * IN, (BOTTOM + 0.25 * IN - top) / n)
     h = pitch * 0.88
     for i, (label, rs, total) in enumerate(data):
         y = top + i * pitch
@@ -229,14 +229,25 @@ def matrix_slide(title, first_col, cols, data, comment):
             z, u = r[2], r[3]
             d = u - z; pc = d / z * 100
             st = status(pc); _, pf, pt, _ = COL[st]
-            pw, ph = 0.78 * IN, h * 0.74
-            pill = box(sl, cx + 0.06 * IN, y + (h - ph) / 2, pw, ph, MSO_SHAPE.ROUNDED_RECTANGLE, fill=pf, adj=0.25)
-            text(sl, 0, 0, 0, 0, ('+' if pc > 0 else '−' if pc < 0 else '') + f'{abs(pc):.1f}'.replace('.', ',') + '%',
-                 11.5, pt, True, shape=pill)
-            tx = cx + 0.06 * IN + pw + 0.07 * IN
+            light = j == len(rs) - 1  # светофор только в итоговом столбце
+            pw, ph = (0.64 if len(cols) > 4 else 0.70) * IN, h * 0.74
+            pill = box(sl, cx + 0.04 * IN, y + (h - ph) / 2, pw, ph, MSO_SHAPE.ROUNDED_RECTANGLE, fill=pf, adj=0.25)
+            sg = '' if abs(pc) < 0.05 else ('+' if pc > 0 else '−')
+            text(sl, 0, 0, 0, 0, sg + f'{abs(pc):.1f}'.replace('.', ',') + '%', 10.5, pt, True, shape=pill)
+            if light:
+                lw, lh = 0.40 * IN, 0.16 * IN
+                lx, ly = cx + 0.04 * IN + pw + 0.05 * IN, y + (h - lh) / 2
+                box(sl, lx, ly, lw, lh, MSO_SHAPE.ROUNDED_RECTANGLE, fill='3A4550', adj=0.5)
+                od = lh * 0.72; gp = (lw - 3 * od) / 4
+                for k, key in enumerate('rog'):
+                    box(sl, lx + gp + k * (od + gp), ly + (lh - od) / 2, od, od, MSO_SHAPE.OVAL,
+                        fill=COL[key][0] if key == st else '5A6570')
+                tx = lx + lw + 0.06 * IN
+            else:
+                tx = cx + 0.04 * IN + pw + 0.10 * IN
             tw = cw - (tx - cx) - 0.02 * IN
-            text(sl, tx, y + h * 0.08, tw, h * 0.46, 'Δ ' + num(d, True), 9.5, '1F2933', total, PP_ALIGN.LEFT)
-            text(sl, tx, y + h * 0.52, tw, h * 0.42, num(z) + ' → ' + num(u), 7.5, '6B7785', False, PP_ALIGN.LEFT)
+            text(sl, tx, y + h * 0.08, tw, h * 0.46, 'Δ ' + num(d, True), 9, '1F2933', total, PP_ALIGN.LEFT)
+            text(sl, tx, y + h * 0.52, tw + 0.1 * IN, h * 0.42, num(z) + ' → ' + num(u), 7, '6B7785', False, PP_ALIGN.LEFT)
     cy = top + n * pitch + 0.05 * IN
     cb = box(sl, LEFT, cy, 9198864, min(6.62 * IN - cy, 1161288), MSO_SHAPE.ROUNDED_RECTANGLE, fill='FFFFFF', line='DDE1E4', adj=0.08)
     tf = cb.text_frame; tf.word_wrap = True; tf.vertical_anchor = MSO_ANCHOR.TOP
@@ -266,26 +277,26 @@ matrix_slide('Сходимость оперативного учёта и мар
     '(январь в ОУ 578 тыс. м³ против 1 565 по замеру). По трём карьерам вне допуска январь (+7,5%%) и март (−6,1%%): объёмы сдвигаются между месяцами.'
     % tuple([num(pct3(tot[j]), True) for j in range(5)] + [cnt(0), cnt(2), cnt(3), cnt(1)]))
 
-# 2–3. Стадии Гросс и Таборный, июль–август (формат образца, тыс. м³)
-rows = []
-for m in (7, 8):
-    sts = ['ST3', 'ST4', 'ST5', 'ST6']
-    rs = [stage_gross(m, s) for s in sts]
-    rows += [('%s · %s' % (MN[m - 1], s), r) for s, r in zip(sts, rs)]
-    rows.append(('%s · итого' % MN[m - 1], add(*rs), True))
-new_slide('Гросс · сходимость по стадиям · июль–август 2026 · тыс. м³', 'Месяц · стадия', 'm3', rows,
-          'Разбивка замера по стадиям есть только в справках за июль и август (в сентябрьском файле лист стадий — копия августа). '
-          'Вне допуска: июль ST3 (учёт выше замера на 8,9%) и август ST5 (+21,8%); по итогу месяца — в допуске. '
-          'Похоже, часть объёма в ОУ отнесена к соседней стадии (август: ST4 −3,7%, ST5 +21,8%).')
-rows = []
-for m in (7, 8):
-    sts = [('WST4', 'W4'), ('EST3', 'E3'), ('EST4', 'E4'), ('VREZ', 'Врезанный')]
-    rs = [stage_tab(m, s) for s, _ in sts]
-    rows += [('%s · %s' % (MN[m - 1], lb), r) for (_, lb), r in zip(sts, rs)]
-    rows.append(('%s · итого' % MN[m - 1], add(*rs), True))
-new_slide('Таборный · сходимость по стадиям · июль–август 2026 · тыс. м³', 'Месяц · стадия', 'm3', rows,
-          'Стадии W4, E3, E4 по замеру есть только за июль и август. Врезанный: замер выше учёта на 9–12% — ОУ занижает выемку; '
-          'E3: учёт выше замера на 8–15%. Итог по карьеру в допуске за счёт взаимной компенсации стадий.')
+# 2–3. Стадии Гросс и Таборный, июль–август (сетка «месяцы × стадии»)
+def stage_matrix(title, cols, fn, keys, comment):
+    data = []
+    for m in (7, 8):
+        rs = [fn(m, k) for k in keys]
+        data.append((MN[m - 1], rs + [add(*rs)], False))
+    data.append(('Итого 2 мес.', [add(*[d[1][j] for d in data]) for j in range(len(keys) + 1)], True))
+    matrix_slide(title, 'Месяц', cols, data, comment)
+
+stage_matrix('Гросс · сходимость ОУ и маркзамера по стадиям · тыс. м³ · июль–август 2026',
+    [('ST3', 'Δ %  ·  Δ  ·  замер → учёт'), ('ST4', 'стадия 4'), ('ST5', 'стадия 5'), ('ST6', 'стадия 6'), ('Карьер', 'стадии 3–6')],
+    stage_gross, ['ST3', 'ST4', 'ST5', 'ST6'],
+    'Разбивка замера по стадиям есть только в справках за июль и август (в сентябрьском файле лист стадий — копия августа). '
+    'Вне допуска: июль ST3 (учёт выше замера на 8,9%) и август ST5 (+21,8%), при этом по карьеру в целом — в допуске. '
+    'Похоже, часть объёма в ОУ отнесена к соседней стадии (август: ST4 −3,7%, ST5 +21,8%).')
+stage_matrix('Таборный · сходимость ОУ и маркзамера по стадиям · тыс. м³ · июль–август 2026',
+    [('W4', 'Δ %  ·  Δ  ·  замер → учёт'), ('E3', 'стадия E3'), ('E4', 'стадия E4'), ('Врезанный', 'VREZ'), ('Карьер', 'W4, E3, E4, Врезанный')],
+    stage_tab, ['WST4', 'EST3', 'EST4', 'VREZ'],
+    'Стадии W4, E3, E4 по замеру есть только за июль и август. Врезанный: замер выше учёта на 9–12% — ОУ занижает выемку; '
+    'E3: учёт выше замера на 8–15%. Итог по карьеру в допуске за счёт взаимной компенсации стадий.')
 
 # 4. Токко по стадиям: месяцы × стадии
 data = []
